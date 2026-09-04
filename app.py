@@ -83,7 +83,10 @@ def load_dataset():
 
 def train_probability_model(df):
     model = SVC(probability=True, random_state=42)
-    model.fit(df[FEATURE_NAMES].values, df["Class"].values)
+    model.fit(
+        df[FEATURE_NAMES].to_numpy(dtype=float),
+        df["Class"].to_numpy(dtype=str),
+    )
     return model
 
 
@@ -113,12 +116,14 @@ def load_model():
 @st.cache_data
 def calculate_model_accuracy():
     df = load_dataset()
+    x = df[FEATURE_NAMES].to_numpy(dtype=float)
+    y = df["Class"].to_numpy(dtype=str)
     x_train, x_test, y_train, y_test = train_test_split(
-        df[FEATURE_NAMES].values,
-        df["Class"].values,
+        x,
+        y,
         test_size=0.2,
         random_state=42,
-        stratify=df["Class"].values,
+        stratify=y,
     )
     accuracy_model = SVC(probability=True, random_state=42)
     accuracy_model.fit(x_train, y_train)
