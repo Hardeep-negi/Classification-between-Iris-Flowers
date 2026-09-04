@@ -160,9 +160,21 @@ def annotated_species_image(species, sample_values):
         height = int(image.height * max_width / image.width)
         image = image.resize((max_width, height))
 
-    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    font = ImageFont.load_default()
+    canvas_padding = int(image.width * 0.18)
+    canvas = Image.new(
+        "RGBA",
+        (image.width + canvas_padding * 2, image.height + canvas_padding),
+        (255, 255, 255, 255),
+    )
+    image_x = canvas_padding
+    image_y = 0
+    canvas.alpha_composite(image, (image_x, image_y))
+
+    draw = ImageDraw.Draw(canvas)
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
+    except OSError:
+        font = ImageFont.load_default()
 
     colors = [
         (64, 196, 255, 235),
@@ -172,31 +184,69 @@ def annotated_species_image(species, sample_values):
     ]
 
     width, height = image.size
-    left = int(width * 0.08)
-    right_limit = int(width * 0.92)
-    base_y = int(height * 0.15)
-    row_gap = max(34, int(height * 0.08))
-    max_value = 8.0
+    callouts = [
+        {
+            "feature": "Sepal length",
+            "anchor": (0.43, 0.58),
+            "label": (0.04, 0.78),
+            "align": "left",
+        },
+        {
+            "feature": "Sepal width",
+            "anchor": (0.38, 0.65),
+            "label": (0.04, 0.92),
+            "align": "left",
+        },
+        {
+            "feature": "Petal length",
+            "anchor": (0.56, 0.35),
+            "label": (0.78, 0.08),
+            "align": "right",
+        },
+        {
+            "feature": "Petal width",
+            "anchor": (0.62, 0.42),
+            "label": (0.80, 0.22),
+            "align": "right",
+        },
+    ]
 
-    for index, (name, value) in enumerate(zip(FEATURE_NAMES, sample_values)):
-        y = base_y + index * row_gap
-        line_length = int((right_limit - left) * min(value / max_value, 1.0))
+    for index, (callout, value) in enumerate(zip(callouts, sample_values)):
         color = colors[index]
-        label = f"{name}: {value:.1f} cm"
+        anchor_x = image_x + int(width * callout["anchor"][0])
+        anchor_y = image_y + int(height * callout["anchor"][1])
+        label_x = int(canvas.width * callout["label"][0])
+        label_y = int(canvas.height * callout["label"][1])
+        label = f'{callout["feature"]}: {value:.1f} cm'
 
-        draw.rounded_rectangle(
-            (left - 8, y - 16, right_limit + 8, y + 18),
-            radius=8,
-            fill=(0, 0, 0, 125),
-        )
-        draw.line((left, y, left + line_length, y), fill=color, width=5)
+        if callout["align"] == "right":
+            text_width = draw.textlength(label, font=font)
+            text_x = label_x - int(text_width)
+        else:
+            text_x = label_x
+
+        elbow_x = int((anchor_x + label_x) / 2)
+        elbow_y = label_y
+        line_points = [(anchor_x, anchor_y), (elbow_x, elbow_y), (label_x, label_y)]
+
+        outline_color = (255, 255, 255, 240)
+        draw.line(line_points, fill=outline_color, width=9, joint="curve")
+        draw.line(line_points, fill=color, width=4, joint="curve")
         draw.ellipse(
-            (left + line_length - 6, y - 6, left + line_length + 6, y + 6),
+            (anchor_x - 8, anchor_y - 8, anchor_x + 8, anchor_y + 8),
             fill=color,
+            outline=(255, 255, 255, 255),
+            width=3,
         )
-        draw.text((left, y - 13), label, fill=(255, 255, 255, 255), font=font)
+        draw.text(
+            (text_x + 2, label_y - 15 + 2),
+            label,
+            fill=(255, 255, 255, 230),
+            font=font,
+        )
+        draw.text((text_x, label_y - 15), label, fill=(20, 24, 33, 255), font=font)
 
-    return Image.alpha_composite(image, overlay)
+    return canvas
 
 
 st.set_page_config(
