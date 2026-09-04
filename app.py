@@ -4,6 +4,9 @@ import pickle
 import numpy as np
 import pandas as pd
 import streamlit as st
+from PIL import Image, ImageDraw, ImageFont
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
 
@@ -25,38 +28,175 @@ DISPLAY_NAMES = {
     "Iris-virginica": "Iris Virginica",
 }
 
+SPECIES_IMAGES = {
+    "Iris-setosa": BASE_DIR / "Irissetosa1.png",
+    "Iris-versicolor": BASE_DIR / "Iris-versicolor-1.png",
+    "Iris-versicolour": BASE_DIR / "Iris-versicolor-1.png",
+    "Iris-virginica": BASE_DIR / "Iris-virginica.png",
+}
+
+SPECIES_DESCRIPTIONS = {
+    "Iris-setosa": (
+        "Iris Setosa usually has smaller petals and wider sepals than the "
+        "other Iris species, which makes it the easiest class to separate."
+    ),
+    "Iris-versicolor": (
+        "Iris Versicolor sits between Setosa and Virginica in many feature "
+        "values, with medium petal length and width."
+    ),
+    "Iris-versicolour": (
+        "Iris Versicolor sits between Setosa and Virginica in many feature "
+        "values, with medium petal length and width."
+    ),
+    "Iris-virginica": (
+        "Iris Virginica generally has the largest petals in the dataset, "
+        "especially petal length and petal width."
+    ),
+}
+
+EXAMPLES = {
+    "Setosa": {
+        "sepal_length": 5.1,
+        "sepal_width": 3.5,
+        "petal_length": 1.4,
+        "petal_width": 0.2,
+    },
+    "Versicolor": {
+        "sepal_length": 5.9,
+        "sepal_width": 3.0,
+        "petal_length": 4.2,
+        "petal_width": 1.5,
+    },
+    "Virginica": {
+        "sepal_length": 6.5,
+        "sepal_width": 3.0,
+        "petal_length": 5.8,
+        "petal_width": 2.2,
+    },
+}
+
+
+@st.cache_data
+def load_dataset():
+    return pd.read_csv(DATA_PATH, names=[*FEATURE_NAMES, "Class"])
+
+
+def train_probability_model(df):
+    model = SVC(probability=True, random_state=42)
+    model.fit(df[FEATURE_NAMES].values, df["Class"].values)
+    return model
+
 
 @st.cache_resource
 def load_model():
+    df = load_dataset()
+
     if MODEL_PATH.exists():
         try:
             with MODEL_PATH.open("rb") as model_file:
-                return pickle.load(model_file), "Loaded saved SVM model."
+                saved_model = pickle.load(model_file)
+            if hasattr(saved_model, "predict_proba"):
+                return saved_model, "Loaded saved SVM model."
+            return (
+                train_probability_model(df),
+                "Trained probability-enabled SVM from iris.data.",
+            )
         except Exception as exc:
             st.warning(
                 "The saved model could not be loaded, so the app trained a fresh "
                 f"SVM model from iris.data instead. Details: {exc}"
             )
 
-    df = pd.read_csv(
-        DATA_PATH,
-        names=[*FEATURE_NAMES, "Class"],
-    )
-    x = df[FEATURE_NAMES].values
-    y = df["Class"].values
+    return train_probability_model(df), "Trained SVM model from iris.data."
 
-    model = SVC(probability=True, random_state=42)
-    model.fit(x, y)
-    return model, "Trained SVM model from iris.data."
+
+@st.cache_data
+def calculate_model_accuracy():
+    df = load_dataset()
+    x_train, x_test, y_train, y_test = train_test_split(
+        df[FEATURE_NAMES].values,
+        df["Class"].values,
+        test_size=0.2,
+        random_state=42,
+        stratify=df["Class"].values,
+    )
+    accuracy_model = SVC(probability=True, random_state=42)
+    accuracy_model.fit(x_train, y_train)
+    predictions = accuracy_model.predict(x_test)
+    return accuracy_score(y_test, predictions)
 
 
 def format_species(label):
     return DISPLAY_NAMES.get(label, label.replace("Iris-", "Iris ").title())
 
 
+def set_example(example_name):
+    for key, value in EXAMPLES[example_name].items():
+        st.session_state[key] = value
+
+
+def measurement_chart(sample_values):
+    return pd.DataFrame(
+        {
+            "Measurement": FEATURE_NAMES,
+            "Value (cm)": sample_values,
+        }
+    )
+
+
+def annotated_species_image(species, sample_values):
+    image_path = SPECIES_IMAGES.get(species)
+    if image_path is None or not image_path.exists():
+        return None
+
+    image = Image.open(image_path).convert("RGBA")
+    max_width = 900
+    if image.width > max_width:
+        height = int(image.height * max_width / image.width)
+        image = image.resize((max_width, height))
+
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font = ImageFont.load_default()
+
+    colors = [
+        (64, 196, 255, 235),
+        (255, 193, 7, 235),
+        (76, 175, 80, 235),
+        (255, 112, 166, 235),
+    ]
+
+    width, height = image.size
+    left = int(width * 0.08)
+    right_limit = int(width * 0.92)
+    base_y = int(height * 0.15)
+    row_gap = max(34, int(height * 0.08))
+    max_value = 8.0
+
+    for index, (name, value) in enumerate(zip(FEATURE_NAMES, sample_values)):
+        y = base_y + index * row_gap
+        line_length = int((right_limit - left) * min(value / max_value, 1.0))
+        color = colors[index]
+        label = f"{name}: {value:.1f} cm"
+
+        draw.rounded_rectangle(
+            (left - 8, y - 16, right_limit + 8, y + 18),
+            radius=8,
+            fill=(0, 0, 0, 125),
+        )
+        draw.line((left, y, left + line_length, y), fill=color, width=5)
+        draw.ellipse(
+            (left + line_length - 6, y - 6, left + line_length + 6, y + 6),
+            fill=color,
+        )
+        draw.text((left, y - 13), label, fill=(255, 255, 255, 255), font=font)
+
+    return Image.alpha_composite(image, overlay)
+
+
 st.set_page_config(
     page_title="Iris Flower Classifier",
-    page_icon="🌸",
+    page_icon=":hibiscus:",
     layout="centered",
 )
 
@@ -67,15 +207,28 @@ st.write(
 )
 
 model, model_status = load_model()
+accuracy = calculate_model_accuracy()
 
 with st.sidebar:
     st.header("Model")
     st.caption(model_status)
+    st.metric("Test accuracy", f"{accuracy * 100:.1f}%")
     st.header("Typical ranges")
     st.caption("Sepal length: 4.3-7.9 cm")
     st.caption("Sepal width: 2.0-4.4 cm")
     st.caption("Petal length: 1.0-6.9 cm")
     st.caption("Petal width: 0.1-2.5 cm")
+
+st.subheader("Try an example")
+example_cols = st.columns(3)
+for column, example_name in zip(example_cols, EXAMPLES):
+    with column:
+        st.button(
+            example_name,
+            on_click=set_example,
+            args=(example_name,),
+            use_container_width=True,
+        )
 
 col1, col2 = st.columns(2)
 
@@ -86,6 +239,7 @@ with col1:
         max_value=10.0,
         value=5.1,
         step=0.1,
+        key="sepal_length",
     )
     petal_length = st.number_input(
         "Petal length (cm)",
@@ -93,6 +247,7 @@ with col1:
         max_value=10.0,
         value=1.4,
         step=0.1,
+        key="petal_length",
     )
 
 with col2:
@@ -102,6 +257,7 @@ with col2:
         max_value=10.0,
         value=3.5,
         step=0.1,
+        key="sepal_width",
     )
     petal_width = st.number_input(
         "Petal width (cm)",
@@ -109,14 +265,20 @@ with col2:
         max_value=10.0,
         value=0.2,
         step=0.1,
+        key="petal_width",
     )
 
-sample = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
+sample_values = [sepal_length, sepal_width, petal_length, petal_width]
+sample = np.array([sample_values])
+
+st.subheader("Input comparison")
+st.bar_chart(measurement_chart(sample_values), x="Measurement", y="Value (cm)")
 
 if st.button("Predict species", type="primary"):
     prediction = model.predict(sample)[0]
     st.subheader(format_species(prediction))
     st.success(f"Predicted class: {prediction}")
+    st.write(SPECIES_DESCRIPTIONS.get(prediction, "This is one of the Iris species."))
 
     if hasattr(model, "predict_proba"):
         probabilities = model.predict_proba(sample)[0]
@@ -127,12 +289,22 @@ if st.button("Predict species", type="primary"):
             }
         ).sort_values("Probability", ascending=False)
 
+        top_probability = probability_table.iloc[0]["Probability"]
+        st.metric("Prediction confidence", f"{top_probability * 100:.1f}%")
         st.bar_chart(probability_table, x="Species", y="Probability")
         st.dataframe(
             probability_table.assign(
                 Probability=lambda df: (df["Probability"] * 100).round(2)
             ),
             hide_index=True,
+            use_container_width=True,
+        )
+
+    annotated_image = annotated_species_image(prediction, sample_values)
+    if annotated_image is not None:
+        st.image(
+            annotated_image,
+            caption=f"{format_species(prediction)} with your input measurements",
             use_container_width=True,
         )
 
