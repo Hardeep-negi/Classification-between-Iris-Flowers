@@ -149,109 +149,172 @@ def measurement_chart(sample_values):
     )
 
 
+def get_font(size, bold=True):
+    candidates = [
+        "arialbd.ttf" if bold else "arial.ttf",
+        "segoeuib.ttf" if bold else "segoeui.ttf",
+        "calibrib.ttf" if bold else "calibri.ttf",
+        "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
+        "LiberationSans-Bold.ttf" if bold else "LiberationSans-Regular.ttf",
+        "FreeSansBold.ttf" if bold else "FreeSans.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for font_name in candidates:
+        try:
+            return ImageFont.truetype(font_name, size)
+        except (OSError, IOError):
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+SPECIES_CALLOUTS = {
+    "Iris-virginica": [
+        {"feature": "Sepal Length", "anchor_rel": (0.28, 0.64), "side": "left", "y_target_rel": 0.40},
+        {"feature": "Sepal Width", "anchor_rel": (0.22, 0.72), "side": "left", "y_target_rel": 0.72},
+        {"feature": "Petal Length", "anchor_rel": (0.64, 0.28), "side": "right", "y_target_rel": 0.25},
+        {"feature": "Petal Width", "anchor_rel": (0.62, 0.44), "side": "right", "y_target_rel": 0.58},
+    ],
+    "Iris-versicolor": [
+        {"feature": "Sepal Length", "anchor_rel": (0.48, 0.58), "side": "left", "y_target_rel": 0.40},
+        {"feature": "Sepal Width", "anchor_rel": (0.40, 0.68), "side": "left", "y_target_rel": 0.72},
+        {"feature": "Petal Length", "anchor_rel": (0.62, 0.28), "side": "right", "y_target_rel": 0.25},
+        {"feature": "Petal Width", "anchor_rel": (0.60, 0.45), "side": "right", "y_target_rel": 0.58},
+    ],
+    "Iris-versicolour": [
+        {"feature": "Sepal Length", "anchor_rel": (0.48, 0.58), "side": "left", "y_target_rel": 0.40},
+        {"feature": "Sepal Width", "anchor_rel": (0.40, 0.68), "side": "left", "y_target_rel": 0.72},
+        {"feature": "Petal Length", "anchor_rel": (0.62, 0.28), "side": "right", "y_target_rel": 0.25},
+        {"feature": "Petal Width", "anchor_rel": (0.60, 0.45), "side": "right", "y_target_rel": 0.58},
+    ],
+    "Iris-setosa": [
+        {"feature": "Sepal Length", "anchor_rel": (0.25, 0.62), "side": "left", "y_target_rel": 0.40},
+        {"feature": "Sepal Width", "anchor_rel": (0.24, 0.72), "side": "left", "y_target_rel": 0.72},
+        {"feature": "Petal Length", "anchor_rel": (0.62, 0.28), "side": "right", "y_target_rel": 0.25},
+        {"feature": "Petal Width", "anchor_rel": (0.60, 0.45), "side": "right", "y_target_rel": 0.58},
+    ],
+}
+
+
 def annotated_species_image(species, sample_values):
     image_path = SPECIES_IMAGES.get(species)
     if image_path is None or not image_path.exists():
         return None
 
-    image = Image.open(image_path).convert("RGBA")
-    max_width = 1400
-    if image.width > max_width:
-        height = int(image.height * max_width / image.width)
-        image = image.resize((max_width, height))
+    orig_image = Image.open(image_path).convert("RGBA")
+    orig_w, orig_h = orig_image.size
 
-    draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 130)
-        value_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 118)
-    except OSError:
-        try:
-            font = ImageFont.truetype("arialbd.ttf", 130)
-            value_font = ImageFont.truetype("arialbd.ttf", 118)
-        except OSError:
-            font = ImageFont.load_default()
-            value_font = ImageFont.load_default()
+    # Add canvas padding so callout cards never crowd the flower or clip screen edges
+    pad_left = 320
+    pad_right = 320
+    pad_top = 80
+    pad_bottom = 80
 
-    callout_color = (0, 229, 255, 255)
+    canvas_w = orig_w + pad_left + pad_right
+    canvas_h = orig_h + pad_top + pad_bottom
 
-    width, height = image.size
-    callouts = [
-        {
-            "feature": "Sepal length",
-            "anchor": (0.43, 0.58),
-            "label": (0.04, 0.70),
-            "align": "left",
-        },
-        {
-            "feature": "Sepal width",
-            "anchor": (0.38, 0.65),
-            "label": (0.04, 0.84),
-            "align": "left",
-        },
-        {
-            "feature": "Petal length",
-            "anchor": (0.56, 0.35),
-            "label": (0.95, 0.05),
-            "align": "right",
-        },
-        {
-            "feature": "Petal width",
-            "anchor": (0.62, 0.42),
-            "label": (0.95, 0.21),
-            "align": "right",
-        },
-    ]
+    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    canvas.paste(orig_image, (pad_left, pad_top), orig_image)
 
-    for index, (callout, value) in enumerate(zip(callouts, sample_values)):
-        anchor_x = int(width * callout["anchor"][0])
-        anchor_y = int(height * callout["anchor"][1])
-        label_x = int(width * callout["label"][0])
-        label_y = int(height * callout["label"][1])
-        label = callout["feature"]
-        value_label = f"{value:.1f} cm"
-        label_width = max(
-            draw.textlength(label, font=font),
-            draw.textlength(value_label, font=value_font),
-        )
+    draw = ImageDraw.Draw(canvas)
 
-        if callout["align"] == "right":
-            text_x = label_x - int(label_width)
+    # Scaled typography for high readability
+    title_font = get_font(28, bold=True)
+    val_font = get_font(34, bold=True)
+
+    # High-contrast palette visible in BOTH light and dark modes
+    accent_color = (245, 158, 11, 255)       # Vibrant Amber - warm, high-contrast, botanical
+    halo_color = (15, 23, 42, 230)          # Deep Slate shadow for crisp contrast on light backgrounds
+    badge_bg = (15, 23, 42, 235)            # Dark slate card background (visible on both light & dark)
+    badge_border = (245, 158, 11, 255)      # Amber border
+    text_label_color = (203, 213, 225, 255) # Light slate-gray
+    text_val_color = (255, 255, 255, 255)   # Pure crisp white
+
+    callouts = SPECIES_CALLOUTS.get(
+        species,
+        [
+            {"feature": "Sepal Length", "anchor_rel": (0.28, 0.64), "side": "left", "y_target_rel": 0.40},
+            {"feature": "Sepal Width", "anchor_rel": (0.22, 0.72), "side": "left", "y_target_rel": 0.72},
+            {"feature": "Petal Length", "anchor_rel": (0.64, 0.28), "side": "right", "y_target_rel": 0.25},
+            {"feature": "Petal Width", "anchor_rel": (0.62, 0.44), "side": "right", "y_target_rel": 0.58},
+        ],
+    )
+
+    for spec, val in zip(callouts, sample_values):
+        ax = pad_left + int(orig_w * spec["anchor_rel"][0])
+        ay = pad_top + int(orig_h * spec["anchor_rel"][1])
+
+        feature_text = spec["feature"]
+        val_text = f"{val:.1f} cm"
+
+        # Calculate text bounding boxes
+        f_bbox = draw.textbbox((0, 0), feature_text, font=title_font)
+        v_bbox = draw.textbbox((0, 0), val_text, font=val_font)
+
+        f_w = f_bbox[2] - f_bbox[0]
+        f_h = f_bbox[3] - f_bbox[1]
+        v_w = v_bbox[2] - v_bbox[0]
+        v_h = v_bbox[3] - v_bbox[1]
+
+        card_w = max(f_w, v_w) + 40
+        card_h = f_h + v_h + 36
+
+        card_y = pad_top + int(orig_h * spec["y_target_rel"]) - card_h // 2
+        card_y = max(20, min(canvas_h - card_h - 20, card_y))
+
+        if spec["side"] == "left":
+            card_x = 30
+            conn_x = card_x + card_w
+            conn_y = card_y + card_h // 2
+            elbow_x = conn_x + 50
         else:
-            text_x = label_x
+            card_x = canvas_w - card_w - 30
+            conn_x = card_x
+            conn_y = card_y + card_h // 2
+            elbow_x = conn_x - 50
 
-        if callout["align"] == "right":
-            line_end_x = text_x - 20
-        else:
-            line_end_x = text_x + int(label_width) + 20
+        elbow_y = ay
+        line_points = [(ax, ay), (elbow_x, elbow_y), (conn_x, conn_y)]
 
-        elbow_x = int((anchor_x + line_end_x) / 2)
-        elbow_y = label_y
-        line_points = [(anchor_x, anchor_y), (elbow_x, elbow_y), (line_end_x, label_y)]
+        # 1. Dual-stroke line: outer dark halo + vibrant accent core
+        draw.line(line_points, fill=halo_color, width=9, joint="curve")
+        draw.line(line_points, fill=accent_color, width=5, joint="curve")
 
-        draw.line(line_points, fill=callout_color, width=12, joint="curve")
-        draw.ellipse(
-            (anchor_x - 24, anchor_y - 24, anchor_x + 24, anchor_y + 24),
-            fill=callout_color,
+        # 2. Precision anchor pin on flower
+        draw.ellipse((ax - 14, ay - 14, ax + 14, ay + 14), fill=halo_color)
+        draw.ellipse((ax - 10, ay - 10, ax + 10, ay + 10), fill=accent_color)
+        draw.ellipse((ax - 4, ay - 4, ax + 4, ay + 4), fill=(255, 255, 255, 255))
+
+        # 3. Callout badge card with rounded corners
+        draw.rounded_rectangle(
+            (card_x, card_y, card_x + card_w, card_y + card_h),
+            radius=14,
+            fill=badge_bg,
+            outline=badge_border,
+            width=2,
         )
-        text_y = label_y - 72
+
+        # 4. Clear, large text inside badge
         draw.text(
-            (text_x, text_y),
-            label,
-            fill=(255, 255, 255, 255),
-            font=font,
-            stroke_width=6,
-            stroke_fill=(6, 12, 18, 255),
+            (card_x + 20, card_y + 14),
+            feature_text,
+            fill=text_label_color,
+            font=title_font,
         )
         draw.text(
-            (text_x, text_y + 120),
-            value_label,
-            fill=(255, 255, 255, 255),
-            font=value_font,
-            stroke_width=6,
-            stroke_fill=(6, 12, 18, 255),
+            (card_x + 20, card_y + 14 + f_h + 10),
+            val_text,
+            fill=text_val_color,
+            font=val_font,
         )
 
-    return image
+    return canvas
 
 
 st.set_page_config(
