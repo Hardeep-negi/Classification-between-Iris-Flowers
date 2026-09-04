@@ -155,26 +155,19 @@ def annotated_species_image(species, sample_values):
         return None
 
     image = Image.open(image_path).convert("RGBA")
-    max_width = 900
+    max_width = 1400
     if image.width > max_width:
         height = int(image.height * max_width / image.width)
         image = image.resize((max_width, height))
 
-    canvas_padding = int(image.width * 0.18)
-    canvas = Image.new(
-        "RGBA",
-        (image.width + canvas_padding * 2, image.height + canvas_padding),
-        (255, 255, 255, 255),
-    )
-    image_x = canvas_padding
-    image_y = 0
-    canvas.alpha_composite(image, (image_x, image_y))
-
-    draw = ImageDraw.Draw(canvas)
+    draw = ImageDraw.Draw(image)
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 86)
     except OSError:
-        font = ImageFont.load_default()
+        try:
+            font = ImageFont.truetype("arialbd.ttf", 86)
+        except OSError:
+            font = ImageFont.load_default()
 
     colors = [
         (64, 196, 255, 235),
@@ -188,40 +181,40 @@ def annotated_species_image(species, sample_values):
         {
             "feature": "Sepal length",
             "anchor": (0.43, 0.58),
-            "label": (0.04, 0.78),
+            "label": (0.04, 0.76),
             "align": "left",
         },
         {
             "feature": "Sepal width",
             "anchor": (0.38, 0.65),
-            "label": (0.04, 0.92),
+            "label": (0.04, 0.91),
             "align": "left",
         },
         {
             "feature": "Petal length",
             "anchor": (0.56, 0.35),
-            "label": (0.78, 0.08),
+            "label": (0.92, 0.08),
             "align": "right",
         },
         {
             "feature": "Petal width",
             "anchor": (0.62, 0.42),
-            "label": (0.80, 0.22),
+            "label": (0.92, 0.23),
             "align": "right",
         },
     ]
 
     for index, (callout, value) in enumerate(zip(callouts, sample_values)):
         color = colors[index]
-        anchor_x = image_x + int(width * callout["anchor"][0])
-        anchor_y = image_y + int(height * callout["anchor"][1])
-        label_x = int(canvas.width * callout["label"][0])
-        label_y = int(canvas.height * callout["label"][1])
+        anchor_x = int(width * callout["anchor"][0])
+        anchor_y = int(height * callout["anchor"][1])
+        label_x = int(width * callout["label"][0])
+        label_y = int(height * callout["label"][1])
         label = f'{callout["feature"]}: {value:.1f} cm'
 
         if callout["align"] == "right":
-            text_width = draw.textlength(label, font=font)
-            text_x = label_x - int(text_width)
+            text_box = draw.textbbox((0, 0), label, font=font, stroke_width=4)
+            text_x = label_x - (text_box[2] - text_box[0])
         else:
             text_x = label_x
 
@@ -230,23 +223,26 @@ def annotated_species_image(species, sample_values):
         line_points = [(anchor_x, anchor_y), (elbow_x, elbow_y), (label_x, label_y)]
 
         outline_color = (255, 255, 255, 240)
-        draw.line(line_points, fill=outline_color, width=9, joint="curve")
-        draw.line(line_points, fill=color, width=4, joint="curve")
+        draw.line(line_points, fill=(10, 12, 18, 230), width=22, joint="curve")
+        draw.line(line_points, fill=outline_color, width=15, joint="curve")
+        draw.line(line_points, fill=color, width=8, joint="curve")
         draw.ellipse(
-            (anchor_x - 8, anchor_y - 8, anchor_x + 8, anchor_y + 8),
+            (anchor_x - 18, anchor_y - 18, anchor_x + 18, anchor_y + 18),
             fill=color,
             outline=(255, 255, 255, 255),
-            width=3,
+            width=6,
         )
+        text_y = label_y - 42
         draw.text(
-            (text_x + 2, label_y - 15 + 2),
+            (text_x, text_y),
             label,
-            fill=(255, 255, 255, 230),
+            fill=(10, 12, 18, 255),
             font=font,
+            stroke_width=5,
+            stroke_fill=(255, 255, 255, 245),
         )
-        draw.text((text_x, label_y - 15), label, fill=(20, 24, 33, 255), font=font)
 
-    return canvas
+    return image
 
 
 st.set_page_config(
