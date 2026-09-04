@@ -162,84 +162,93 @@ def annotated_species_image(species, sample_values):
 
     draw = ImageDraw.Draw(image)
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 86)
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 130)
+        value_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 118)
     except OSError:
         try:
-            font = ImageFont.truetype("arialbd.ttf", 86)
+            font = ImageFont.truetype("arialbd.ttf", 130)
+            value_font = ImageFont.truetype("arialbd.ttf", 118)
         except OSError:
             font = ImageFont.load_default()
+            value_font = ImageFont.load_default()
 
-    colors = [
-        (64, 196, 255, 235),
-        (255, 193, 7, 235),
-        (76, 175, 80, 235),
-        (255, 112, 166, 235),
-    ]
+    callout_color = (0, 229, 255, 255)
 
     width, height = image.size
     callouts = [
         {
             "feature": "Sepal length",
             "anchor": (0.43, 0.58),
-            "label": (0.04, 0.76),
+            "label": (0.04, 0.70),
             "align": "left",
         },
         {
             "feature": "Sepal width",
             "anchor": (0.38, 0.65),
-            "label": (0.04, 0.91),
+            "label": (0.04, 0.84),
             "align": "left",
         },
         {
             "feature": "Petal length",
             "anchor": (0.56, 0.35),
-            "label": (0.92, 0.08),
+            "label": (0.95, 0.05),
             "align": "right",
         },
         {
             "feature": "Petal width",
             "anchor": (0.62, 0.42),
-            "label": (0.92, 0.23),
+            "label": (0.95, 0.21),
             "align": "right",
         },
     ]
 
     for index, (callout, value) in enumerate(zip(callouts, sample_values)):
-        color = colors[index]
         anchor_x = int(width * callout["anchor"][0])
         anchor_y = int(height * callout["anchor"][1])
         label_x = int(width * callout["label"][0])
         label_y = int(height * callout["label"][1])
-        label = f'{callout["feature"]}: {value:.1f} cm'
+        label = callout["feature"]
+        value_label = f"{value:.1f} cm"
+        label_width = max(
+            draw.textlength(label, font=font),
+            draw.textlength(value_label, font=value_font),
+        )
 
         if callout["align"] == "right":
-            text_box = draw.textbbox((0, 0), label, font=font, stroke_width=4)
-            text_x = label_x - (text_box[2] - text_box[0])
+            text_x = label_x - int(label_width)
         else:
             text_x = label_x
 
-        elbow_x = int((anchor_x + label_x) / 2)
-        elbow_y = label_y
-        line_points = [(anchor_x, anchor_y), (elbow_x, elbow_y), (label_x, label_y)]
+        if callout["align"] == "right":
+            line_end_x = text_x - 20
+        else:
+            line_end_x = text_x + int(label_width) + 20
 
-        outline_color = (255, 255, 255, 240)
-        draw.line(line_points, fill=(10, 12, 18, 230), width=22, joint="curve")
-        draw.line(line_points, fill=outline_color, width=15, joint="curve")
-        draw.line(line_points, fill=color, width=8, joint="curve")
+        elbow_x = int((anchor_x + line_end_x) / 2)
+        elbow_y = label_y
+        line_points = [(anchor_x, anchor_y), (elbow_x, elbow_y), (line_end_x, label_y)]
+
+        draw.line(line_points, fill=callout_color, width=12, joint="curve")
         draw.ellipse(
-            (anchor_x - 18, anchor_y - 18, anchor_x + 18, anchor_y + 18),
-            fill=color,
-            outline=(255, 255, 255, 255),
-            width=6,
+            (anchor_x - 24, anchor_y - 24, anchor_x + 24, anchor_y + 24),
+            fill=callout_color,
         )
-        text_y = label_y - 42
+        text_y = label_y - 72
         draw.text(
             (text_x, text_y),
             label,
-            fill=(10, 12, 18, 255),
+            fill=(255, 255, 255, 255),
             font=font,
-            stroke_width=5,
-            stroke_fill=(255, 255, 255, 245),
+            stroke_width=6,
+            stroke_fill=(6, 12, 18, 255),
+        )
+        draw.text(
+            (text_x, text_y + 120),
+            value_label,
+            fill=(255, 255, 255, 255),
+            font=value_font,
+            stroke_width=6,
+            stroke_fill=(6, 12, 18, 255),
         )
 
     return image
